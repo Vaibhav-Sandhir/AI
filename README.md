@@ -1,1 +1,1 @@
-# Practice on general AI and ML
+# Practice on general AI
