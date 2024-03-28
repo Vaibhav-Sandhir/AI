@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 class Layer:
     def __init__(self, curr_neurons, prev_neurons):
@@ -98,11 +99,22 @@ class Model:
         self.layers[0].A = X_test
         self.forwardProp()
         m = self.Y1.shape[1]
+        results = {"Actual Price":list(Y_test[0]), "Predicted Price":list(self.Y1[0])}
+        df = pd.DataFrame(results)
+        acc = []
         error = 0
         for i in range(0, m):
             error += abs(self.Y1[0,i] - Y_test[0,i]) / Y_test[0, i]
+            acc.append(1 - (abs(self.Y1[0,i] - Y_test[0,i]) / Y_test[0, i]))
         error = error / m
-        print("Accuracy: ", 1 - error)                              
+        df['Accuracy'] = acc
+        print("Accuracy: ", 1 - error) 
+        df.to_csv('/home/vaibhav/Desktop/AI/Laptop Price Prediction/Results.csv')
+        plt.plot(df.index, df['Accuracy'], marker='o', linestyle='', color='red', markersize=5)
+        plt.title('Accuracy for Individual Estimations')
+        plt.xlabel('Index')
+        plt.ylabel('Accuracy')
+        plt.savefig('/home/vaibhav/Desktop/AI/Laptop Price Prediction/Accuracy.png')                             
 
 def getData():
     data = pd.read_csv('/home/vaibhav/Desktop/AI/Laptop Price Prediction/preprocessed_data.csv')
