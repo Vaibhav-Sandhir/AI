@@ -46,6 +46,14 @@ class Model:
     def SELU_derivative(self, Z, alpha=1.6732632423543772848170429916717, scale=1.0507009873554804934193349852946):
         return scale * np.where(Z > 0, 1, alpha * np.exp(Z))
     
+    def leakyReLU(self, Z):
+        A = np.maximum(0.01 * Z, Z)
+        return A
+    
+    def leakyReLU_derivative(self, Z):
+        dZ = np.where(Z > 0, 1, 0.01)
+        return dZ
+    
     def forwardProp(self):
         for i in range(1, len(self.layers)):
             curr_layer = self.layers[i]
