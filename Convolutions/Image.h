@@ -15,5 +15,5 @@ struct Image {
 
     bool read(const char* filename);
     bool write(const char* filename);
-    Image& std_convolve(uint32_t ker_width, uint32_t ker_height, double ker[], uint32_t centre_r, uint32_t centre_c);
+    void cuda_convolve(uint32_t ker_width, uint32_t ker_height, double ker[], uint32_t centre_r, uint32_t centre_c);
 };
