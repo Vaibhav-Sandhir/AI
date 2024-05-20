@@ -39,7 +39,7 @@ class RNN:
             self.activations.append(at)
             self.inputs.append(xt)
 
-        self.error = yt_hat - y_sample    
+        self.error = yt_hat - y_sample   
         self.loss = 0.5*self.error**2
         self.yt_hat = yt_hat
 
@@ -50,7 +50,7 @@ class RNN:
         dWy = (self.error @ self.activations[-1].T).T
         dWx = np.zeros(self.Wx.shape)
         dWa = np.zeros(self.Wa.shape)
-        dat = self.error @ self.Wy.T
+        dat = self.error @ self.Wy.T 
         
         for step in reversed(range(n)):
             dzt = (1 - self.activations[step] ** 2) * dat.T
@@ -100,4 +100,5 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.subplot(122)
     plt.plot([i for i in range(len(x_test))],y_test,np.array(rnn.outputs).reshape(y_test.shape))
+    plt.savefig("Prediction from RNN")
     plt.show()
