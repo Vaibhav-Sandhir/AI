@@ -47,7 +47,7 @@ def initBias(m , n):
     B = np.zeros((m , n))
     return B
 
-def getData(file_path):
+def getData(file_path, size):
     corpus = open(file_path, 'r')
     sentences = []
     sentence = []
@@ -63,7 +63,7 @@ def getData(file_path):
                 sentence = []
                 label = []
                 cnt += 1
-                if cnt >= 200:
+                if cnt >= size:
                     break
             continue
         parts = line.strip().split()
@@ -126,7 +126,7 @@ def preProcess(sentences, labels):
     
     inputs = np.zeros((number_of_sentences, sentence_len, vocab_size))
     tags = np.zeros((number_of_sentences, sentence_len, output_size))
-    for i in range(0, 1):
+    for i in range(0, number_of_sentences):
         for j in range(0, sentence_len):
             vector_tag = encodeTag(labels[i][j])
             vector_token = encodeToken(sentences[i][j])
@@ -136,13 +136,15 @@ def preProcess(sentences, labels):
     return inputs, tags, sentence_len
 
 class LSTM:
-    def __init__(self, X, Y, input_size, hidden_size, output_size, sentence_len, vocab_size):
+    def __init__(self, X, Y, X_test, Y_test, input_size, hidden_size, output_size, sentence_len, vocab_size):
         self.hidden_size = hidden_size
         self.sentence_len = sentence_len
         self.output_size = output_size
         self.vocab_size = vocab_size
         self.X = X
         self.Y = Y
+        self.X_test = X_test
+        self.Y_test = Y_test
         self.Wu = [initWeight(hidden_size, input_size), initWeight(hidden_size, input_size)]
         self.Bu = [initBias(hidden_size, 1), initBias(hidden_size, 1)]
         self.Wf = [initWeight(hidden_size, input_size), initWeight(hidden_size, input_size)]
@@ -302,20 +304,54 @@ class LSTM:
             self.Wc[i] += dWc[i] * learning_rate
             self.Bc[i] += dBc[i]* learning_rate
     
+    def test(self):
+        accuracy = 0
+        for i in range(len(self.X_test)):
+                predictions = self.forwardprop(i)
+                predictions = np.reshape(predictions, (self.sentence_len, self.output_size))
+                correct = 0
+                for j in range(self.sentence_len):
+                    prediction = np.argmax(predictions[i])
+                    truth = np.argmax(self.Y_test[i][j])
+                    print(self.Y_test[i][j])
+                    token = np.argmax(self.X_test[i][j])
+                    print("-------------------------------------")
+                    print("Word : ", ind_to_token[token])
+                    print("Model Predicted : ", ind_to_tag[prediction])
+                    print("Ground Truth : ", ind_to_tag[truth])
+                    print("-------------------------------------")
+                    if(ind_to_tag[prediction] == ind_to_tag[truth]):
+                        correct += 1
+                accuracy += correct / self.sentence_len
+        avg_accuracy = accuracy / len(self.X_test)
+        print(avg_accuracy) 
+                
+                
+
     def train(self, epochs, learning_rate):
         for _ in tqdm(range(epochs)):
+            total_loss = 0
             for i in range(len(self.X)):
                 predictions = self.forwardprop(i)
                 predictions = np.reshape(predictions, (self.sentence_len, self.output_size))
                 errors = self.Y[i] - predictions
-        
-                self.backprop(errors, learning_rate)   
-
-
+                predictions = np.clip(predictions, 1e-12, 1. - 1e-12)
+                loss = -np.sum(self.Y[i] * np.log(predictions)) / self.Y[i].shape[0]
+                total_loss += loss
+                self.backprop(errors, learning_rate)
+            avg_loss = total_loss
+            print(avg_loss)
+        self.test()
+    
 if __name__ == "__main__":
-    sentences, labels = getData("train.txt")
+    size = 500
+    split = int(size * 0.8)
+    sentences, labels = getData("train.txt", size)
     inputs, tags, sentence_len = preProcess(sentences, labels)
-    print(inputs.shape)
+    X_train = inputs[:split]
+    Y_train = tags[:split]
+    X_test = inputs[split:]
+    Y_test = tags[split:]
     hidden_size = 50
-    lstm = LSTM(inputs, tags, vocab_size + hidden_size, hidden_size, output_size, sentence_len, vocab_size)
+    lstm = LSTM(X_train, Y_train, X_test, Y_test, vocab_size + hidden_size, hidden_size, output_size, sentence_len, vocab_size)
     lstm.train(50, 0.05)
