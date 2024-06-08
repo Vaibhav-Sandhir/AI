@@ -1,8 +1,6 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.metrics import confusion_matrix
 
 class LogisticRegression():
 
@@ -99,8 +97,6 @@ class LogisticRegression():
         print("Recall: ", recall)
         print("F1-Score: ", f1score)
         plt.figure()
-        cm = confusion_matrix(self.Y_test.values, predictions)
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Predicted 0', 'Predicted 1'], yticklabels=['Actual 0', 'Actual 1'])
         plt.xlabel('Predicted')
         plt.ylabel('Actual')
         plt.savefig("Confusion Matrix")
