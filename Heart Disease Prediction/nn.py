@@ -16,7 +16,10 @@ class FNN():
             self.dW = None
             self.dB = None
             self.D = None
-
+            self.VdW = np.zeros_like(self.W)
+            self.VdB = np.zeros_like(self.B)
+            self.SdW = np.zeros_like(self.W)
+            self.SdB = np.zeros_like(self.B)
     
     def __init__(self, X_train: np.ndarray, Y_train: np.ndarray, X_test: np.ndarray, Y_test: np.ndarray, number_hidden_layers: int, sizes: list):
         self.X_train = X_train
@@ -68,7 +71,8 @@ class FNN():
             return np.where(Z > 0, 1, 0.01)
     
     def sigmoid(self, Z: np.ndarray) -> np.ndarray:
-        return 1 / (1 + np.exp(-Z))
+        return 1 / (1 + np.exp(-np.clip(Z, -500, 500)))
+        #return 1 / (1 + np.exp(-Z))
 
     def forwardprop(self, on_test_set = False, keep_prob = 1.0) -> np.ndarray:
         for l in range(1, self.L):            
@@ -101,11 +105,35 @@ class FNN():
             dA = dA / keep_prob
             self.layers[l - 1].dZ = dA * self.activation(self.layers[l - 1].Z, derivative = True)
     
-    def update_parameters(self, learning_rate: float) -> None:
+    def update_parameters(self, learning_rate: float, optimizer: str, time: int) -> None:
+        if optimizer == "Gradient Descent":
+            self.gradient_descent(learning_rate = learning_rate)
+        elif optimizer == "Adam":
+            self.adam(learning_rate = learning_rate, time = time)
+    
+    def gradient_descent(self, learning_rate: float) -> None:
         for l in range(1, self.L):
             layer = self.layers[l]
-            layer.W = layer.W - (learning_rate * layer.dW) 
+            layer.W = layer.W - (learning_rate * layer.dW)
             layer.B = layer.B - (learning_rate * layer.dB)
+    
+    def adam(self, learning_rate: float, time: int) -> None:
+        epsilon = 1e-8
+        beta1 = 0.9
+        beta2 = 0.999
+        for l in range(1, self.L):
+            layer = self.layers[l]
+            layer.VdW = beta1 * layer.VdW + (1 - beta1) * layer.dW
+            layer.VdB = beta1 * layer.VdB + (1 - beta1) * layer.dB
+            layer.SdW = beta2 * layer.SdW + (1 - beta2) * (layer.dW ** 2)
+            layer.SdB = beta2 * layer.SdB + (1 - beta2) * (layer.dB ** 2)
+            VdW_corrected = layer.VdW / (1 - beta1 ** time)
+            VdB_corrected = layer.VdB / (1 - beta1 ** time)
+            SdW_corrected = layer.SdW / (1 - beta2 ** time)
+            SdB_corrected = layer.SdB / (1 - beta2 ** time)
+
+            layer.W = layer.W - learning_rate * (VdW_corrected / (np.sqrt(SdW_corrected) + epsilon))
+            layer.B = layer.B - learning_rate * (VdB_corrected / (np.sqrt(SdB_corrected) + epsilon))
     
     def cost(self, Y_hat: np.ndarray):
         Y_hat = np.squeeze(Y_hat)
@@ -121,7 +149,7 @@ class FNN():
             weights_sum += np.sum(np.square(self.layers[l].W))
         return (1 / self.m) * (regularization_parameter / 2) * weights_sum
     
-    def fit(self, epochs: int, learning_rate: float, activation_function: str, regularization_parameter: float, keep_prob: float) -> None:
+    def fit(self, epochs: int, learning_rate: float, activation_function: str, regularization_parameter: float, keep_prob: float, optimizer = "Gradient Descent", decay_rate = 1.0) -> None:
         self.activation_function = activation_function
         for epoch in range(epochs):
             Y_hat = self.forwardprop(on_test_set = False, keep_prob = keep_prob)
@@ -130,7 +158,8 @@ class FNN():
             if epoch % 10 == 0:
                 print("Cost : ", cost + L2_regularized_cost)
             self.backwardprop(Y_hat = Y_hat, regularization_parameter = regularization_parameter, keep_prob = keep_prob)
-            self.update_parameters(learning_rate = learning_rate)
+            self.update_parameters(learning_rate = learning_rate, optimizer = optimizer, time = epoch + 1)
+            learning_rate = (1 / (1 + decay_rate * epoch)) * learning_rate
     
     def test(self, on_test_set = False):
         Y_hat = self.forwardprop(on_test_set = on_test_set)
@@ -139,10 +168,10 @@ class FNN():
             Y = np.squeeze(self.Y_test)
         else:    
             Y = np.squeeze(self.Y_train)
-        tp = 0
-        fp = 0
-        tn = 0
-        fn = 0
+        tp = 0.001
+        fp = 0.001
+        tn = 0.001
+        fn = 0.001
         for i in range(len(Y_hat)):
             y_hat = 1 if Y_hat[i] >= 0.5 else 0
             y = Y[i]
@@ -176,6 +205,6 @@ if __name__ == "__main__":
     X_test = test.iloc[:, :-1].values.T
     Y_test = test.iloc[:, -1:].values.T
     model = FNN(X_train = X_train, Y_train = Y_train, X_test = X_test, Y_test = Y_test, number_hidden_layers = 3, sizes = [100, 100, 64])
-    model.fit(epochs = 3000, learning_rate = 0.2, activation_function = "ReLU", regularization_parameter = 5, keep_prob = 1.0)
+    model.fit(epochs = 500, learning_rate = 0.2, activation_function = "ReLU", regularization_parameter = 0, keep_prob = 1.0, optimizer = "Adam", decay_rate = 0.0)
     model.test(on_test_set = False)
     model.test(on_test_set = True)
