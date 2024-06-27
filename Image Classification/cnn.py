@@ -21,7 +21,7 @@ def convolve_forward(A_prev, layer):
     stride = layer.stride
 
     m, n_H_prev, n_W_prev, n_C_prev = A_prev.shape
-    f, f, n_C_prev, n_C = W.shape
+    f, _, n_C_prev, n_C = W.shape
     n_H = int((n_H_prev - f) / stride) + 1
     n_W = int((n_W_prev - f) / stride) + 1
     Z = np.zeros((m, n_H, n_W, n_C))
@@ -45,11 +45,11 @@ def convolve_forward(A_prev, layer):
 
 def pool_forward(A_prev, layer):
     P = layer.P
-    stride = layer.P
+    stride = layer.stride
     mode = layer.mode
 
     m, n_H_prev, n_W_prev, n_C_prev = A_prev.shape
-    f, f, n_C = P.shape
+    f, _, n_C = P.shape
     n_H = int((n_H_prev - f) / stride) + 1
     n_W = int((n_W_prev - f) / stride) + 1
     A_p = np.zeros((m, n_H, n_W, n_C))
@@ -97,7 +97,7 @@ def convolve_backward(prev_layer, layer):
 
     m, n_H, n_W, n_C = layer.dZ.shape
     m, n_H_prev, n_W_prev, n_C_prev = A_prev.shape
-    f, f, n_C_prev, n_C = W.shape
+    f, _, n_C_prev, n_C = W.shape
     dA_prev = np.zeros_like(A_prev)
 
     for i in range(0, m):
@@ -113,16 +113,16 @@ def convolve_backward(prev_layer, layer):
                     a_slice = a_prev[vert_start:vert_end, horiz_start:horiz_end, :]
                     da_prev[vert_start:vert_end, horiz_start:horiz_end, :] += W[:, :, :, c] * layer.dZ[i, h, w, c]
                     layer.dW[:, :, :, c] += a_slice * layer.dZ[i, h, w, c]
-                    layer.db[:, :, :, c] += layer.dZ[i, h, w, c]
+                    layer.dB[:, :, :, c] += layer.dZ[i, h, w, c]
         dA_prev[i, :, :, :] = da_prev
     
     if not layer.input:
-        prev_layer.dA = layer.dA
+        prev_layer.dA = dA_prev
 
 def pool_backward(prev_layer, layer):
     stride = layer.stride
     A_prev = prev_layer.A
-    f, f, n_C = layer.P.shape
+    f, _, n_C = layer.P.shape
     m, n_H_prev, n_W_prev, n_C_prev = A_prev.shape
     m, n_H, n_W, n_C = layer.dA.shape
     dA_prev = np.zeros(A_prev.shape)
@@ -137,8 +137,8 @@ def pool_backward(prev_layer, layer):
                     horiz_start = w * stride
                     horiz_end   = w * stride + f
                     if layer.mode == "max":
-                        a_prev_slice = a_prev[ vert_start:vert_end, horiz_start:horiz_end, c ]
-                        mask = create_mask( a_prev_slice )
+                        a_prev_slice = a_prev[vert_start:vert_end, horiz_start:horiz_end, c]
+                        mask = create_mask(a_prev_slice)
                         dA_prev[i, vert_start:vert_end, horiz_start:horiz_end, c] += mask * layer.dA[i, h, w, c]
                     elif layer.mode == "average":
                         da = layer.dA[i, h, w, c]
@@ -152,6 +152,9 @@ def linear_backward(A_prev, layer, Y_train, m):
         layer.dZ = layer.A - Y_train
     else:
         layer.dZ = layer.dA * ReLU(layer.Z, derivative = True)
+    if(len(A_prev.shape) == 4):
+        m, s1, s2, s3 = A_prev.shape
+        A_prev = A_prev.reshape(s1*s2*s3, m)
     layer.dW = (1 / m) * (A_prev @ layer.dZ.T)
     layer.dB = (1 / m) * np.sum(layer.dZ, axis = 1, keepdims = True)
     dA = layer.W @ layer.dZ
@@ -206,6 +209,7 @@ class CNN:
         self.X_test = X_test
         self.Y_test = Y_test
         self.layers = []
+        self.m, _, _, _ = X_train.shape 
     
     def addConvLayer(self, f, n_C_prev, n_C, stride, iput = False):
         layer = ConvLayer(f, n_C_prev, n_C, stride, iput)
@@ -237,7 +241,7 @@ class CNN:
                 A_prev = self.layers[l - 1].A
 
             if layer.name == "Convolution":
-                layer.A = convolve_forward(A_prev, layer)    
+                layer.A = convolve_forward(A_prev, layer)  
             elif layer.name == "Pooling":
                 layer.A = pool_forward(A_prev, layer)
             elif layer.name == "Linear":
@@ -261,9 +265,9 @@ class CNN:
             if layer.name == "Convolution":
                 convolve_backward(prev_layer, layer)    
             elif layer.name == "Pooling":
-                pool_forward(prev_layer, layer)
+                pool_backward(prev_layer, layer)
             elif layer.name == "Linear":
-                prev_layer.dA = linear_forward(prev_layer, layer)
+                prev_layer.dA = linear_backward(prev_layer.A, layer, self.Y_train, self.m)
                 if layer.transition:
                     A_prev = prev_layer.A
                     m, s1, s2, s3 = A_prev.shape
@@ -279,13 +283,10 @@ class CNN:
     def train(self, epochs, learning_rate):
         self.L = len(self.layers)
         for epoch in range(epochs):
-            print("HI 1")
             Y_hat = self.forward_pass()
-            print("HI 2")
             loss = self.CELoss(Y_hat)
             print("Loss: ", loss)
             self.backward_pass()
-            print("HI 3")
             self.update_parameters(learning_rate)
 
 
@@ -299,12 +300,18 @@ def load_data():
 
 if __name__ == "__main__":
     X_train, Y_train, X_test, Y_test = load_data()
+    # print(X_train.shape)
+    # print(Y_train.shape)
+    X_train = X_train[:100, :, :, :]
+    Y_train = Y_train[:100, :].T
+    # print(X_train.shape)
+    # print(Y_train.shape)
     cnn = CNN(X_train, Y_train, X_test, Y_test)
     cnn.addConvLayer(f = 7, n_C_prev = 3, n_C = 16, stride = 2, iput = True)
     cnn.addPoolLayer(f = 3, n_C = 16, stride = 2, mode = "max")
     cnn.addConvLayer(f = 3, n_C_prev = 16, n_C = 32, stride = 2)
     cnn.addPoolLayer(f = 3, n_C = 32, stride = 2, mode = "max")
-    cnn.addLinearLayer(curr_neurons = 64, prev_neurons = 6*6*32, transition = True)
+    cnn.addLinearLayer(curr_neurons = 64, prev_neurons = 800, transition = True)
     cnn.addLinearLayer(curr_neurons = 16, prev_neurons = 64)
     cnn.addLinearLayer(curr_neurons = 6, prev_neurons = 16, output = True)
     cnn.train(epochs = 100, learning_rate = 0.01)
