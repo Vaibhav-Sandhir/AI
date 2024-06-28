@@ -1,4 +1,5 @@
 import numpy as np
+from tqdm import tqdm
 
 def ReLU(Z, derivative = False):
     if not derivative:
@@ -282,13 +283,23 @@ class CNN:
     
     def train(self, epochs, learning_rate):
         self.L = len(self.layers)
-        for epoch in range(epochs):
+        for epoch in tqdm(range(epochs)):
             Y_hat = self.forward_pass()
             loss = self.CELoss(Y_hat)
             print("Loss: ", loss)
+            self.train_accuracy(Y_hat)
             self.backward_pass()
             self.update_parameters(learning_rate)
-
+    
+    def train_accuracy(self, Y_hat):
+        accuracy = 0
+        for i in range(len(self.Y_train.T)):
+            ind1 = np.argmax(self.Y_train.T[i])
+            ind2 = np.argmax(Y_hat.T[0])
+            if ind1 == ind2:
+                accuracy += 1
+        accuracy = accuracy / len(self.Y_train.T)
+        print(accuracy)
 
 def load_data():
     X_train = np.load('x_train.npy')
@@ -300,12 +311,8 @@ def load_data():
 
 if __name__ == "__main__":
     X_train, Y_train, X_test, Y_test = load_data()
-    # print(X_train.shape)
-    # print(Y_train.shape)
     X_train = X_train[:100, :, :, :]
     Y_train = Y_train[:100, :].T
-    # print(X_train.shape)
-    # print(Y_train.shape)
     cnn = CNN(X_train, Y_train, X_test, Y_test)
     cnn.addConvLayer(f = 7, n_C_prev = 3, n_C = 16, stride = 2, iput = True)
     cnn.addPoolLayer(f = 3, n_C = 16, stride = 2, mode = "max")
